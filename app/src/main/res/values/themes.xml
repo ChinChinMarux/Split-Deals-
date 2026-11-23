@@ -1,0 +1,11 @@
+<resources>
+    <style name="Theme.SplitDeals" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@color/canvas</item>
+        <item name="android:windowBackground">@color/canvas</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <style name="Theme.SplitDeals.Splash" parent="Theme.SplitDeals">
+        <item name="android:windowBackground">@drawable/splash</item>
+    </style>
+</resources>
