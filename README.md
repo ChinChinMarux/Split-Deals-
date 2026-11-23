@@ -5,7 +5,7 @@ Aplikasi Android offline untuk membagi tagihan makan bersama secara adil, dalam 
 ## Fitur
 
 - Tambah orang dan item belanja.
-- Tap chip orang untuk menentukan siapa yang menikmati tiap item.
+- Tap chip orang untuk menentukan siapa yang harus membayar tiap item.
 - Dua mode split:
   - **Per item**: tiap orang bayar item yang dia ambil.
   - **Rata**: total dibagi rata.
@@ -41,45 +41,8 @@ app/src/main/java/com/example/splitthedeals/
 app/src/test/java/com/example/splitthedeals/domain/SplitCalculatorTest.kt
 ```
 
-## Build
-
-```powershell
-$env:JAVA_HOME="C:\Program Files\Java\jdk-19"
-.\gradlew.bat assembleDebug
-```
-
-APK output:
-
-```text
-app/build/outputs/apk/debug/app-debug.apk
-```
-
-## Test
-
-```powershell
-$env:JAVA_HOME="C:\Program Files\Java\jdk-19"
-.\gradlew.bat testDebugUnitTest
-```
-
-Saat ini: 7 test, 0 failure.
-
-## Lint
-
-```powershell
-$env:JAVA_HOME="C:\Program Files\Java\jdk-19"
-.\gradlew.bat lintDebug
-```
-
-Saat ini: 0 error.
-
 ## Desain
 
 - Warna terang: canvas `#F7F6F2`, surface putih, tinta `#1B1D1B`, aksen eucalyptus `#0B6E62`.
 - Tombol minimal 56dp, radius 12dp, angka `tabular-nums`.
-- Tanpa gradient, glow, emoji, grid, atau statistik palsu.
 - Layout menyesuaikan inset navigasi HP dan keyboard.
-
-## Status
-
-- MVP offline selesai.
-- Belum ada: edit nama duplikat di UI realtime, test penyimpanan, lokalisasi `Locale("id","ID")`, signing release.
