@@ -1,6 +1,6 @@
-# Split the Bills
+# Split%Deals
 
-Aplikasi Android offline untuk membagi tagihan makan bersama secara adil, dalam Rupiah, dengan hasil sampai sen.
+Aplikasi Android offline untuk membagi tagihan makan bersama secara adil, dalam Rupiah, dengan hasil akurat.
 
 ## Fitur
 
@@ -18,9 +18,9 @@ Aplikasi Android offline untuk membagi tagihan makan bersama secara adil, dalam 
 
 ## Mata uang
 
-- Semua uang disimpan sebagai sen (`Long`), tanpa `Double`.
+- Semua uang disimpan sebagai karakter (`Long`), tanpa `Double`.
 - Input string diparse dengan `BigDecimal`.
-- Format tampilan: `Rp12.50`.
+- Format tampilan: `Rp12500`.
 
 ## Teknologi
 
