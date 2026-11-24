@@ -70,7 +70,7 @@ Source: `backend/`
 Contoh:
 
 ```http
-GET https://splitthedeals-api.vercel.app/health
+GET https://{vercel-app URL}/health
 ```
 
 ```json
@@ -116,20 +116,10 @@ payments       status lunas per anggota
 `local.properties` (gitignored):
 
 ```properties
-sdk.dir=C\:\\Users\\adkar\\AppData\\Local\\Android\\Sdk
-baseUrl=https://splitthedeals-api.vercel.app/
+baseUrl=https://{vercel-app URL}/health
 ```
 
-`BASE_URL` tertanam di APK saat build. Ganti `baseUrl` → link deploy vercel.
-
-Signing release:
-
-```properties
-storeFile=C:\\Users\\adkar\\Keys\\splitdeals.jks
-storePassword=...
-keyAlias=splitdeals
-keyPassword=...
-```
+Ganti `baseUrl` → link deploy vercel.
 
 ### Backend
 
