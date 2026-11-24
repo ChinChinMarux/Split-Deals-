@@ -50,6 +50,7 @@ fun BillDetailScreen(navController: NavController, billId: String) {
     val vm: BillDetailViewModel = viewModel { BillDetailViewModel(BillStore(context), billId) }
     val state by vm.state.collectAsState()
     var pendingCompleteId by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingUnpaidMessage by rememberSaveable { mutableStateOf<String?>(null) }
 
     if (pendingCompleteId != null) {
         AlertDialog(
@@ -71,6 +72,26 @@ fun BillDetailScreen(navController: NavController, billId: String) {
                     if (id != null) navController.navigate(Screen.splitEdit(id))
                 }) {
                     Text("Tidak, ubah tagihan", color = MaterialTheme.colorScheme.secondary)
+                }
+            },
+        )
+    }
+
+    if (pendingUnpaidMessage != null) {
+        AlertDialog(
+            onDismissRequest = { pendingUnpaidMessage = null },
+            text = { Text(pendingUnpaidMessage ?: "") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.selesaikan()
+                    pendingUnpaidMessage = null
+                }) {
+                    Text("Ya, selesaikan", color = MaterialTheme.colorScheme.primary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingUnpaidMessage = null }) {
+                    Text("Tidak, bayar dulu", color = MaterialTheme.colorScheme.secondary)
                 }
             },
         )
@@ -185,7 +206,19 @@ fun BillDetailScreen(navController: NavController, billId: String) {
                 item {
                     PrimaryButton(
                         text = if (data.paidCount == data.totalPeople) "Selesaikan bill" else "Tandai selesai",
-                        onClick = { vm.selesaikan() },
+                        onClick = {
+                            val unpaidNames = bill.people
+                                .filter { person ->
+                                    !(bill.payments.firstOrNull { it.personId == person.id }?.paid ?: false)
+                                }
+                                .map { it.name }
+                            if (unpaidNames.isEmpty()) {
+                                vm.selesaikan()
+                            } else {
+                                pendingUnpaidMessage = unpaidNames.joinToString(", ") +
+                                    " belum membayar tagihan. Selesaikan tagihan?"
+                            }
+                        },
                         enabled = bill.status != BillStatus.SELESAI,
                     )
                 }

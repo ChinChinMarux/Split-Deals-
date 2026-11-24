@@ -106,7 +106,7 @@ fun ProfileScreen(navController: NavController) {
                         val info = appInfo(context)
                         Text("Split the Deals", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Versi ${info.first}\nAplikasi pembagi tagihan offline. Dibuat untuk memenuhi Tugas Akhir Praktikum PPB - Evan Adkara.",
+                            "Versi ${info.first}\nAplikasi Android split bill untuk penggunaan pribadi skala kecil. Berjalan offline-first dan tersinkron dengan Web Service sendiri (Express + libSQL/Turso) yang di-deploy di Vercel.\n Dibuat untuk memenuhi Tugas Akhir Praktikum PPB - Evan Adkara.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp),

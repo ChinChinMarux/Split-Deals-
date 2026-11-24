@@ -1,48 +1,157 @@
 # Split%Deals
 
-Aplikasi Android offline untuk membagi tagihan makan bersama secara adil, dalam Rupiah, dengan hasil akurat.
+Aplikasi Android split bill untuk penggunaan pribadi skala kecil. Berjalan offline-first dan tersinkron dengan Web Service sendiri (Express + libSQL/Turso) yang di-deploy di Vercel.
 
 ## Fitur
 
 - Tambah orang dan item belanja.
-- Tap chip orang untuk menentukan siapa yang harus membayar tiap item.
-- Dua mode split:
-  - **Per item**: tiap orang bayar item yang dia ambil.
-  - **Rata**: total dibagi rata.
-- Pajak: tanpa pajak, persen, atau nominal.
-- Biaya lain (service charge, ongkir, dll.) dibagi rata.
-- Hasil per orang dengan rincian item, pajak, dan biaya lain.
-- Cek otomatis: jumlah bagian selalu sama dengan total.
-- Simpan bill di HP saja (tanpa internet, cloud, atau AI).
-- Buka kembali dan edit bill tersimpan.
-
-## Mata uang
-
-- Semua uang disimpan sebagai karakter (`Long`), tanpa `Double`.
-- Input string diparse dengan `BigDecimal`.
-- Format tampilan: `Rp12500`.
+- Pilih pembayaran tiap item (Semuanya / per orang).
+- Mode split **Per item** dan **Rata**.
+- Pajak: tanpa / persen / nominal.
+- Biaya lain dan diskon.
+- Hasil per orang, rincian:
+  ```text
+  Anggota 1: {total}
+  - item . Harga
+  ```
+- Catat pembayaran per anggota.
 
 ## Teknologi
 
-- Kotlin
-- Jetpack Compose Material 3
-- Navigation Compose
-- SharedPreferences + `org.json` untuk penyimpanan lokal
-- JUnit untuk unit test
+| Lapisan | Teknologi |
+|---|---|
+| Android | Kotlin, Jetpack Compose Material 3 |
+| Navigasi | Navigation Compose |
+| State | ViewModel + StateFlow + collectAsState |
+| UI states | UiState (Loading / Error / Success) |
+| Lokal | SharedPreferences + org.json |
+| Network | Retrofit + OkHttp + Gson |
+| Backend | Node.js + Express |
+| Database | libSQL / Turso (SQLite cloud) |
+| Deploy | Vercel Serverless Function |
+| Uang | Long + BigDecimal |
+| Test | JUnit |
+| Build | Gradle 9.5, AGP 9.3.3, JDK 19 |
 
-## Struktur
+## Arsitektur sinkron
 
 ```text
-app/src/main/java/com/example/splitthedeals/
-  domain/     Money.kt, Model.kt, SplitCalculator.kt
-  data/       BillStore.kt, BillSession.kt
-  ui/         theme/, common/, navigation/, bill/, result/, saved/
-  MainActivity.kt
-app/src/test/java/com/example/splitthedeals/domain/SplitCalculatorTest.kt
+APK (offline-first)
+  ↕ SharedPreferences + StateFlow
+SyncManager (Retrofit)
+  ↕ HTTPS
+API Express (Vercel)
+  ↕ libSQL client
+Turso
 ```
 
-## Desain
+- `HomeViewModel` dan `RiwayatViewModel` memanggil `GET /bills` saat dibuka.
+- `BillScreen` memanggil `POST /bills` saat simpan/edit.
+- `BillDetailViewModel` memanggil PATCH status/paid.
+- `RiwayatViewModel` memanggil DELETE saat hapus.
+- Jika API gagal, app tetap memakai data lokal.
 
-- Warna terang: canvas `#F7F6F2`, surface putih, tinta `#1B1D1B`, aksen eucalyptus `#0B6E62`.
-- Tombol minimal 56dp, radius 12dp, angka `tabular-nums`.
-- Layout menyesuaikan inset navigasi HP dan keyboard.
+## Web Service
+
+Source: `backend/`
+
+### Endpoint
+
+| Method | Path | Fungsi |
+|---|---|---|
+| GET | `/bills` | Semua bill lengkap |
+| GET | `/bills/:id` | Satu bill lengkap |
+| POST | `/bills` | Buat / simpan bill |
+| PUT | `/bills/:id` | Update bill |
+| PATCH | `/bills/:id/status` | Ubah status BERJALAN / SELESAI |
+| PATCH | `/bills/:id/members/:memberId/paid` | Tandai lunas / batal |
+| DELETE | `/bills/:id` | Hapus bill |
+
+Contoh:
+
+```http
+GET https://splitthedeals-api.vercel.app/health
+```
+
+```json
+{"status":"ok","database":"turso"}
+```
+
+Body `POST /bills` adalah `BillInput` lengkap:
+
+```json
+{
+  "id": "bill-001",
+  "title": "Makan Malam",
+  "people": [{ "id": "p1", "name": "A" }],
+  "items": [{ "id": "i1", "name": "Nasi", "priceCents": 10000, "sharerIds": ["p1"] }],
+  "mode": "BY_ITEM",
+  "taxKind": "NONE",
+  "taxPercentBps": 0,
+  "taxCents": 0,
+  "otherCostsCents": 0,
+  "discountKind": "NONE",
+  "discountPercentBps": 0,
+  "discountCents": 0,
+  "status": "BERJALAN",
+  "payments": [{ "personId": "p1", "paid": false }],
+  "createdAt": 1
+}
+```
+
+### Tabel database
+
+```text
+bills          ringkasan tagihan
+bill_members   anggota + urutan
+bill_items     item + harga + urutan
+bill_shares    relasi item ↔ anggota
+payments       status lunas per anggota
+```
+
+## Konfigurasi
+
+### Android
+
+`local.properties` (gitignored):
+
+```properties
+sdk.dir=C\:\\Users\\adkar\\AppData\\Local\\Android\\Sdk
+baseUrl=https://splitthedeals-api.vercel.app/
+```
+
+`BASE_URL` tertanam di APK saat build. Ganti `baseUrl` → link deploy vercel.
+
+Signing release:
+
+```properties
+storeFile=C:\\Users\\adkar\\Keys\\splitdeals.jks
+storePassword=...
+keyAlias=splitdeals
+keyPassword=...
+```
+
+### Backend
+
+`backend/.env` (gitignored):
+
+```properties
+TURSO_URL=libsql://...
+TURSO_TOKEN=...
+```
+
+`backend/vercel.json` me-rewrite semua path ke `/api/index.js`.
+
+## Deploy backend
+
+1. Commit & push `backend/` ke GitHub.
+2. Vercel → import repo.
+3. Root Directory: `backend`.
+4. Build Command: `npm install`.
+5. Start Command: `npm start`.
+6. Environment Variables: `TURSO_URL`, `TURSO_TOKEN`.
+7. Deploy.
+8. Cek `/health`.
+9. Jika `baseUrl` berubah, rebuild APK.
+
+`Built for personal purposes.`

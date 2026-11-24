@@ -73,7 +73,21 @@ private data class ItemDraft(
     val priceText: String,
     val sharerIds: List<String>,
     val expanded: Boolean = true,
+    val fieldError: String? = null,
 )
+
+private fun itemMissingFields(draft: ItemDraft, mode: SplitMode): List<String> {
+    val missing = mutableListOf<String>()
+    if (draft.name.isBlank()) missing.add("Nama item")
+    if (draft.priceText.isBlank() || Money.parse(draft.priceText) == null) missing.add("Harga")
+    if (mode == SplitMode.BY_ITEM && draft.sharerIds.isEmpty()) missing.add("Dibagi ke")
+    return missing
+}
+
+private fun itemError(draft: ItemDraft, mode: SplitMode): String? {
+    val missing = itemMissingFields(draft, mode)
+    return if (missing.isEmpty()) null else "Ada kolom kosong: ${missing.joinToString(", ")}"
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -136,23 +150,29 @@ fun BillScreen(navController: NavController, billId: String? = null) {
             error = "Nama orang tidak boleh duplikat."
             return
         }
-        val drafts = items.filter { it.name.isNotBlank() }
-        if (drafts.isEmpty()) {
+        if (items.isEmpty()) {
             error = "Minimal 1 item."
             return
         }
 
+        val invalidItems = items.mapIndexedNotNull { index, draft ->
+            itemError(draft, mode)?.let { index to it }
+        }
+        if (invalidItems.isNotEmpty()) {
+            val firstInvalid = invalidItems.first()
+            items = items.mapIndexed { index, draft ->
+                draft.copy(
+                    expanded = index == firstInvalid.first,
+                    fieldError = invalidItems.firstOrNull { it.first == index }?.second,
+                )
+            }
+            error = "Lengkapi item yang ditandai."
+            return
+        }
+
         val parsedItems = mutableListOf<ItemInput>()
-        for (draft in drafts) {
-            val price = Money.parse(draft.priceText)
-            if (price == null) {
-                error = "Harga item '${draft.name}' tidak valid."
-                return
-            }
-            if (mode == SplitMode.BY_ITEM && draft.sharerIds.isEmpty()) {
-                error = "Item '${draft.name}' belum ada anggota."
-                return
-            }
+        for (draft in items) {
+            val price = Money.parse(draft.priceText) ?: 0L
             parsedItems.add(ItemInput(draft.id, draft.name.trim(), price, draft.sharerIds))
         }
 
@@ -315,23 +335,41 @@ fun BillScreen(navController: NavController, billId: String? = null) {
         item { SectionHeader("Item") }
         items(items.size, key = { items[it].id }) { index ->
             val item = items[index]
-            val isExpanded = item.expanded || item.name.isBlank()
+            val isExpanded = item.expanded
             ItemCard(
                 item = item,
                 expanded = isExpanded,
+                error = item.fieldError,
                 people = people,
                 mode = mode,
                 onToggleExpanded = {
-                    if (item.name.isNotBlank()) {
-                        items = items.mapIndexed { p, d -> if (p == index) d.copy(expanded = !d.expanded) else d }
+                    val opening = !item.expanded
+                    items = items.map { draft ->
+                        when {
+                            draft.id == item.id -> draft.copy(
+                                expanded = opening,
+                                fieldError = if (opening) null else draft.fieldError,
+                            )
+                            opening && draft.expanded -> draft.copy(
+                                expanded = false,
+                                fieldError = itemError(draft, mode),
+                            )
+                            else -> draft
+                        }
                     }
                 },
                 onNameChange = { name ->
-                    items = items.mapIndexed { p, d -> if (p == index) d.copy(name = name) else d }
+                    items = items.mapIndexed { p, d ->
+                        if (p == index) d.copy(name = name, fieldError = null) else d
+                    }
                 },
                 onPriceChange = { price ->
                     items = items.mapIndexed { p, d ->
-                        if (p == index) d.copy(priceText = price.filter { it.isDigit() || it == '.' }) else d
+                        if (p == index) {
+                            d.copy(priceText = price.filter { it.isDigit() || it == '.' }, fieldError = null)
+                        } else {
+                            d
+                        }
                     }
                 },
                 onSharerToggle = { personId ->
@@ -339,6 +377,7 @@ fun BillScreen(navController: NavController, billId: String? = null) {
                         if (d.id != item.id) d
                         else d.copy(
                             sharerIds = if (personId in d.sharerIds) d.sharerIds - personId else d.sharerIds + personId,
+                            fieldError = null,
                         )
                     }
                 },
@@ -346,7 +385,10 @@ fun BillScreen(navController: NavController, billId: String? = null) {
                     val allSelected = people.isNotEmpty() && people.all { it.id in item.sharerIds }
                     items = items.map { d ->
                         if (d.id != item.id) d
-                        else d.copy(sharerIds = if (allSelected) emptyList() else people.map { it.id })
+                        else d.copy(
+                            sharerIds = if (allSelected) emptyList() else people.map { it.id },
+                            fieldError = null,
+                        )
                     }
                 },
                 onDelete = { items = items.filterIndexed { p, _ -> p != index } },
@@ -354,7 +396,15 @@ fun BillScreen(navController: NavController, billId: String? = null) {
         }
         item {
             OutlinedButton(
-                onClick = { items = items + ItemDraft(UUID.randomUUID().toString(), "", "", emptyList()) },
+                onClick = {
+                    items = items.map { draft ->
+                        if (draft.expanded) {
+                            draft.copy(expanded = false, fieldError = itemError(draft, mode))
+                        } else {
+                            draft
+                        }
+                    } + ItemDraft(UUID.randomUUID().toString(), "", "", emptyList(), expanded = true)
+                },
                 modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
             ) { Text("Tambah item") }
         }
@@ -448,6 +498,7 @@ fun BillScreen(navController: NavController, billId: String? = null) {
 private fun ItemCard(
     item: ItemDraft,
     expanded: Boolean,
+    error: String?,
     people: List<PersonDraft>,
     mode: SplitMode,
     onToggleExpanded: () -> Unit,
@@ -475,13 +526,19 @@ private fun ItemCard(
                     )
                 }
             }
-            if (item.name.isNotBlank()) {
-                Icon(
-                    if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
-                    contentDescription = if (expanded) "Tutup" else "Buka",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Icon(
+                if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                contentDescription = if (expanded) "Tutup" else "Buka",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (error != null) {
+            Text(
+                error,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp),
+            )
         }
         AnimatedVisibility(visible = expanded) {
             Column(Modifier.padding(top = 12.dp)) {
