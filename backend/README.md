@@ -1,30 +1,6 @@
 # SplitDeals API
 
-Express + libSQL (SQLite lokal atau Turso). Skala kecil, penggunaan pribadi.
-
-## Jalankan
-
-```bash
-npm install
-npm start
-```
-
-Default: `http://localhost:3000`, DB = `backend/local.db`.
-
-Untuk Turso, isi `.env` dari `.env.example`:
-
-```properties
-TURSO_URL=libsql://splitdeals-xxx.turso.io
-TURSO_TOKEN=token_dari_turso
-```
-
-`GET /health` harus mengembalikan `"database":"turso"`.
-
-## Tabel
-
-Tabel `bills` menyimpan kolom ringkasan (`title`, `status`, `mode`, pajak, diskon, total) plus `payload` JSON untuk detail (anggota, item, shares, payments). Foto profil **tidak** lewat API — tetap lokal di HP.
-
-Tidak ada tabel `settings`, `profiles`, atau object storage.
+Express + libSQL/Turso. Skala kecil, penggunaan pribadi. Bisa jalan lokal atau serverless di Vercel.
 
 ## Endpoint
 
@@ -39,14 +15,49 @@ Tidak ada tabel `settings`, `profiles`, atau object storage.
 | PATCH | `/bills/:id/members/:memberId/paid` | Tandai lunas/batal |
 | DELETE | `/bills/:id` | Hapus bill |
 
+Tidak ada upload foto, tidak ada tabel `settings`/`profiles`. Foto profil tetap lokal di HP.
+
+## Jalankan lokal
+
+```bash
+npm install
+npm start
+```
+
+Default `http://localhost:3000`. DB = `backend/local.db`.
+
+Untuk Turso, isi `.env` dari `.env.example`, lalu `npm start`. `GET /health` harus `"database":"turso"`.
+
+## Deploy ke Vercel
+
+1. Commit & push `backend/` ke GitHub.
+2. Vercel → **Add New... → Project** → import repo.
+3. Set **Root Directory** = `backend`.
+4. Framework Preset: Other.
+5. Build Command: `npm install`.
+6. Output Directory: kosong.
+7. Environment Variables:
+   ```text
+   TURSO_URL=libsql://...
+   TURSO_TOKEN=token_dari_turso
+   ```
+8. Deploy.
+9. Cek `https://<project>.vercel.app/health`.
+10. Di `local.properties`:
+    ```properties
+    baseUrl=https://<project>.vercel.app/
+    ```
+11. Build ulang APK release.
+
+`vercel.json` me-rewrite semua path ke `/api/index.js`.
+
 ## Postman
 
 ```text
 GET http://localhost:3000/health
-GET http://localhost:3000/bills
-POST http://localhost:3000/bills
-Body → raw → JSON → payload BillInput
+GET https://<project>.vercel.app/health
+POST https://<project>.vercel.app/bills
 ```
 
 Emulator: `http://10.0.2.2:3000/`.
-HP fisik: `http://IP_LAPTOP:3000/` (set `baseUrl` di `local.properties`).
+HP fisik + Vercel: pakai URL HTTPS langsung.

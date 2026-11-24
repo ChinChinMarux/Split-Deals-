@@ -4,7 +4,9 @@
 /reference/
 /backend/node_modules/
 /backend/.env
+/backend/.env*.local
 /backend/local.db
+.vercel
 /local.properties
 /.idea
 .DS_Store

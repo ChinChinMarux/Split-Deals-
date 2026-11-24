@@ -8,55 +8,76 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
-const url = process.env.TURSO_URL || "file:local.db";
-const config = process.env.TURSO_TOKEN
-  ? { url, authToken: process.env.TURSO_TOKEN }
-  : { url };
-const db = createClient(config);
+const state = globalThis;
 
-async function init() {
-  await db.execute(`
-    CREATE TABLE IF NOT EXISTS bills (
-      id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'BERJALAN',
-      mode TEXT NOT NULL,
-      tax_kind TEXT NOT NULL DEFAULT 'NONE',
-      tax_percent_bps INTEGER NOT NULL DEFAULT 0,
-      tax_cents INTEGER NOT NULL DEFAULT 0,
-      other_costs_cents INTEGER NOT NULL DEFAULT 0,
-      discount_kind TEXT NOT NULL DEFAULT 'NONE',
-      discount_percent_bps INTEGER NOT NULL DEFAULT 0,
-      discount_cents INTEGER NOT NULL DEFAULT 0,
-      grand_total_cents INTEGER NOT NULL DEFAULT 0,
-      payload TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      updated_at INTEGER NOT NULL
-    )
-  `);
-
-  const info = await db.execute("PRAGMA table_info(bills)");
-  const columns = new Set(info.rows.map((row) => row.name));
-  const migrations = {
-    title: "TEXT NOT NULL DEFAULT ''",
-    status: "TEXT NOT NULL DEFAULT 'BERJALAN'",
-    mode: "TEXT NOT NULL DEFAULT 'BY_ITEM'",
-    tax_kind: "TEXT NOT NULL DEFAULT 'NONE'",
-    tax_percent_bps: "INTEGER NOT NULL DEFAULT 0",
-    tax_cents: "INTEGER NOT NULL DEFAULT 0",
-    other_costs_cents: "INTEGER NOT NULL DEFAULT 0",
-    discount_kind: "TEXT NOT NULL DEFAULT 'NONE'",
-    discount_percent_bps: "INTEGER NOT NULL DEFAULT 0",
-    discount_cents: "INTEGER NOT NULL DEFAULT 0",
-    grand_total_cents: "INTEGER NOT NULL DEFAULT 0",
-    created_at: "INTEGER NOT NULL DEFAULT 0",
-    updated_at: "INTEGER NOT NULL DEFAULT 0",
-  };
-  for (const [name, definition] of Object.entries(migrations)) {
-    if (!columns.has(name)) {
-      await db.execute(`ALTER TABLE bills ADD COLUMN ${name} ${definition}`);
-    }
+function getDb() {
+  if (!state.__splitdealsDb) {
+    const url = process.env.TURSO_URL || "file:local.db";
+    const config = process.env.TURSO_TOKEN
+      ? { url, authToken: process.env.TURSO_TOKEN }
+      : { url };
+    state.__splitdealsDb = createClient(config);
   }
+  return state.__splitdealsDb;
+}
+
+async function ensureInit() {
+  if (!state.__splitdealsInit) {
+    state.__splitdealsInit = (async () => {
+      const db = getDb();
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS bills (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'BERJALAN',
+          mode TEXT NOT NULL DEFAULT 'BY_ITEM',
+          tax_kind TEXT NOT NULL DEFAULT 'NONE',
+          tax_percent_bps INTEGER NOT NULL DEFAULT 0,
+          tax_cents INTEGER NOT NULL DEFAULT 0,
+          other_costs_cents INTEGER NOT NULL DEFAULT 0,
+          discount_kind TEXT NOT NULL DEFAULT 'NONE',
+          discount_percent_bps INTEGER NOT NULL DEFAULT 0,
+          discount_cents INTEGER NOT NULL DEFAULT 0,
+          grand_total_cents INTEGER NOT NULL DEFAULT 0,
+          payload TEXT NOT NULL,
+          created_at INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER NOT NULL DEFAULT 0
+        )
+      `);
+
+      const info = await db.execute("PRAGMA table_info(bills)");
+      const columns = new Set(info.rows.map((row) => row.name));
+      const migrations = {
+        title: "TEXT NOT NULL DEFAULT ''",
+        status: "TEXT NOT NULL DEFAULT 'BERJALAN'",
+        mode: "TEXT NOT NULL DEFAULT 'BY_ITEM'",
+        tax_kind: "TEXT NOT NULL DEFAULT 'NONE'",
+        tax_percent_bps: "INTEGER NOT NULL DEFAULT 0",
+        tax_cents: "INTEGER NOT NULL DEFAULT 0",
+        other_costs_cents: "INTEGER NOT NULL DEFAULT 0",
+        discount_kind: "TEXT NOT NULL DEFAULT 'NONE'",
+        discount_percent_bps: "INTEGER NOT NULL DEFAULT 0",
+        discount_cents: "INTEGER NOT NULL DEFAULT 0",
+        grand_total_cents: "INTEGER NOT NULL DEFAULT 0",
+        created_at: "INTEGER NOT NULL DEFAULT 0",
+        updated_at: "INTEGER NOT NULL DEFAULT 0",
+      };
+      for (const [name, definition] of Object.entries(migrations)) {
+        if (!columns.has(name)) {
+          await db.execute(`ALTER TABLE bills ADD COLUMN ${name} ${definition}`);
+        }
+      }
+    })().catch((error) => {
+      state.__splitdealsInit = null;
+      throw error;
+    });
+  }
+  return state.__splitdealsInit;
+}
+
+async function readyDb() {
+  await ensureInit();
+  return getDb();
 }
 
 function parseBill(req, res) {
@@ -72,12 +93,23 @@ function rowToBill(row) {
   return JSON.parse(row.payload);
 }
 
-app.get("/health", (req, res) => {
-  res.json({ status: "ok", database: url.startsWith("libsql") ? "turso" : "sqlite" });
+function databaseName() {
+  const url = process.env.TURSO_URL || "file:local.db";
+  return url.startsWith("libsql") ? "turso" : "sqlite";
+}
+
+app.get("/health", async (req, res) => {
+  try {
+    await readyDb();
+    res.json({ status: "ok", database: databaseName() });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get("/bills", async (req, res) => {
   try {
+    const db = await readyDb();
     const rs = await db.execute("SELECT payload FROM bills ORDER BY created_at DESC");
     res.json(rs.rows.map(rowToBill));
   } catch (e) {
@@ -87,6 +119,7 @@ app.get("/bills", async (req, res) => {
 
 app.get("/bills/:id", async (req, res) => {
   try {
+    const db = await readyDb();
     const rs = await db.execute({
       sql: "SELECT payload FROM bills WHERE id = ?",
       args: [req.params.id],
@@ -103,6 +136,7 @@ app.get("/bills/:id", async (req, res) => {
 
 async function upsert(bill, res) {
   try {
+    const db = await readyDb();
     await db.execute({
       sql: `INSERT INTO bills (
         id, title, status, mode,
@@ -167,6 +201,7 @@ app.patch("/bills/:id/status", async (req, res) => {
     return;
   }
   try {
+    const db = await readyDb();
     const rs = await db.execute({
       sql: "SELECT payload FROM bills WHERE id = ?",
       args: [req.params.id],
@@ -175,8 +210,7 @@ app.patch("/bills/:id/status", async (req, res) => {
       res.status(404).json({ error: "Bill not found" });
       return;
     }
-    const bill = { ...rowToBill(rs.rows[0]), status };
-    await upsert(bill, res);
+    await upsert({ ...rowToBill(rs.rows[0]), status }, res);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -189,6 +223,7 @@ app.patch("/bills/:id/members/:memberId/paid", async (req, res) => {
     return;
   }
   try {
+    const db = await readyDb();
     const rs = await db.execute({
       sql: "SELECT payload FROM bills WHERE id = ?",
       args: [req.params.id],
@@ -210,6 +245,7 @@ app.patch("/bills/:id/members/:memberId/paid", async (req, res) => {
 
 app.delete("/bills/:id", async (req, res) => {
   try {
+    const db = await readyDb();
     await db.execute({ sql: "DELETE FROM bills WHERE id = ?", args: [req.params.id] });
     res.status(204).end();
   } catch (e) {
@@ -217,15 +253,12 @@ app.delete("/bills/:id", async (req, res) => {
   }
 });
 
-init()
-  .then(() => {
-    const port = process.env.PORT || 3000;
-    app.listen(port, "0.0.0.0", () => {
-      console.log(`SplitDeals API listening on http://0.0.0.0:${port}`);
-      console.log(`Database: ${url}`);
-    });
-  })
-  .catch((e) => {
-    console.error("Failed to init database", e);
-    process.exit(1);
+if (require.main === module) {
+  const port = process.env.PORT || 3000;
+  app.listen(port, "0.0.0.0", () => {
+    console.log(`SplitDeals API listening on http://0.0.0.0:${port}`);
+    console.log(`Database: ${process.env.TURSO_URL || "file:local.db"}`);
   });
+}
+
+module.exports = app;
