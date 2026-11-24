@@ -3,6 +3,7 @@ package com.example.splitthedeals.ui.history
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.splitthedeals.data.BillStore
+import com.example.splitthedeals.data.remote.SyncManager
 import com.example.splitthedeals.domain.BillInput
 import com.example.splitthedeals.ui.common.UiState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +18,9 @@ class RiwayatViewModel(private val store: BillStore) : ViewModel() {
 
     init {
         _state.value = UiState.Loading
+        viewModelScope.launch {
+            SyncManager.pull().forEach { store.save(it) }
+        }
         viewModelScope.launch {
             BillStore.bills.collect { bills ->
                 try {
@@ -34,5 +38,6 @@ class RiwayatViewModel(private val store: BillStore) : ViewModel() {
 
     fun delete(id: String) {
         store.delete(id)
+        SyncManager.delete(id)
     }
 }

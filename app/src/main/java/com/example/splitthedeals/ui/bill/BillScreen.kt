@@ -45,6 +45,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.splitthedeals.data.BillStore
+import com.example.splitthedeals.data.remote.SyncManager
 import com.example.splitthedeals.domain.BillInput
 import com.example.splitthedeals.domain.BillStatus
 import com.example.splitthedeals.domain.DiscountKind
@@ -225,6 +226,7 @@ fun BillScreen(navController: NavController, billId: String? = null) {
         try {
             SplitCalculator.calculate(bill)
             val saved = BillStore(context).save(bill)
+            SyncManager.push(saved)
             error = null
             navController.navigate(Screen.billDetail(saved.id)) {
                 popUpTo(Screen.Home) { inclusive = false }

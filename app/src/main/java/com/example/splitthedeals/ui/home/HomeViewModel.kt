@@ -3,6 +3,7 @@ package com.example.splitthedeals.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.splitthedeals.data.BillStore
+import com.example.splitthedeals.data.remote.SyncManager
 import com.example.splitthedeals.domain.BillInput
 import com.example.splitthedeals.domain.BillStatus
 import com.example.splitthedeals.ui.common.UiState
@@ -29,6 +30,9 @@ class HomeViewModel(private val store: BillStore) : ViewModel() {
 
     init {
         _state.value = UiState.Loading
+        viewModelScope.launch {
+            SyncManager.pull().forEach { store.save(it) }
+        }
         viewModelScope.launch {
             BillStore.bills.collect { bills ->
                 try {

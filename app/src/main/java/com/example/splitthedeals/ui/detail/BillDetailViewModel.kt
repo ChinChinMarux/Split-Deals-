@@ -3,6 +3,7 @@ package com.example.splitthedeals.ui.detail
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.splitthedeals.data.BillStore
+import com.example.splitthedeals.data.remote.SyncManager
 import com.example.splitthedeals.domain.BillInput
 import com.example.splitthedeals.domain.BillStatus
 import com.example.splitthedeals.domain.PaymentStatus
@@ -58,6 +59,7 @@ class BillDetailViewModel(private val store: BillStore, private val billId: Stri
                 },
             )
             store.save(updated)
+            SyncManager.pushPaid(billId, personId, updated.payments.firstOrNull { it.personId == personId }?.paid ?: false)
             publish(updated)
         }
     }
@@ -66,7 +68,9 @@ class BillDetailViewModel(private val store: BillStore, private val billId: Stri
     fun selesaikan() {
         viewModelScope.launch(Dispatchers.IO) {
             val bill = store.load(billId) ?: return@launch
-            store.save(bill.copy(status = BillStatus.SELESAI))
+            val updated = bill.copy(status = BillStatus.SELESAI)
+            store.save(updated)
+            SyncManager.pushStatus(billId, "SELESAI")
         }
     }
 
@@ -74,7 +78,9 @@ class BillDetailViewModel(private val store: BillStore, private val billId: Stri
         viewModelScope.launch(Dispatchers.IO) {
             val bill = store.load(billId) ?: return@launch
             if (bill.status == BillStatus.SELESAI) {
-                store.save(bill.copy(status = BillStatus.BERJALAN))
+                val updated = bill.copy(status = BillStatus.BERJALAN)
+                store.save(updated)
+                SyncManager.pushStatus(billId, "BERJALAN")
             }
         }
     }
